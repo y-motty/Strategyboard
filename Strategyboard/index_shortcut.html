@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>作戦ボード</title>
+		<meta charset="UTF-8">
+		<script src="./jquery-3.2.1.js"></script>
+	</head>
+	<body>
+		<div id="wrapper">
+			<div id="media">
+				<canvas id="canvas">図形を表示するには、canvasタグをサポートしたブラウザが必要です。</canvas>
+			</div>
+			<div id="ctrl">
+				<input id="file" type="file" name="file" value="">
+			</div>
+		</div>
+		
+		<style>
+			body {margin: 0px;}
+			#ctrl {display: none;}
+			#media {
+				background-size: contain;
+				background-repeat: no-repeat;
+				background-position: center center;
+				text-align: center;
+				position: relative;
+				width: 100vw;
+				height: 100vh;
+			}
+				#media #src {
+					background-size: contain;
+					background-repeat: no-repeat;
+					background-position: center center;
+					margin: auto;
+					position: absolute;
+					z-index: 0;
+				}
+				#media #canvas {
+					position: absolute;
+					left: 0px;
+					top: 0px;
+					z-index: 10;
+				}
+			video {display: block;margin: 0px;padding: 0px;}
+		</style>
+
+
+		<script>
+			$(function(){
+				// 初期値（サイズ、色、アルファ値）の決定
+				var colors = ['#000000', '#FF0000', '#FF8800', '#FFFF00', '#00FF00', '#0000FF', '#8800FF', '#FF00FF', '#ffffff'];
+				var mouseX = "", mouseY = "";
+				var penwidth = 2, erasewidth = 30;
+				var defosize = penwidth;
+				var defocolor = colors[1];
+				var defoalpha = 1.0;
+				var defozoom = 1;
+
+				// サイズ初期化
+				$('#media canvas').attr({'height': $('#media').height(), 'width': $('#media').width()});
+			
+				// ファイル選択時
+				$('input[name="file"]').change(function(){
+					// 一旦クリア
+					$('#media :not(canvas)').remove();
+					$('#video_ctrl').hide();
+					
+					var name = './data/' + $('#file')[0].files[0].name, obj;
+					if (name.substr(-3).match(/jpg|png|gif/i)) {
+						// 画像の配置
+						obj = $('<div>').attr('id', 'src').css('background-image', 'url(' + name + ')').width($('#media').width()).height($('#media').height());
+						$('#media').append(obj);
+					}
+					else if (name.substr(-3).match(/mp4|avi|flv|mp2|mpg|m4v/i)) {
+						// 動画だったら読み込み
+						obj = $('<video>').attr({'id': 'src', 'src': name}).width($('#media').width()).height($('#media').height());
+						// イベントをセット
+						obj.on('loadedmetadata', function(){
+							// デフォルトボリュームは控えめに
+							$('video').get(0).volume = 0.1;
+						});
+						// 設置
+						$('#media').append(obj);
+					}
+					else {
+						// その他は汎用的にObjectで埋め込み
+						obj = $('<object>').attr({'id': 'src', 'width': '100%', 'height': '100%', 'data': name});
+						// イベントをセット
+						$('#media').append(obj);
+					}
+					// キャンバス初期化
+					$('#media #canvas').attr({'width': obj.width(), 'height': obj.height()});
+					clearCanvas();
+				});
+				
+				// ズームイベントをセット
+				$(window).resize(zoom);
+				function zoom(){
+					defozoom = Math.min(4, Math.max(defozoom, 1));
+					var oldW = $('#src').width(), oldH = $('#src').height();
+					var newW = $('#media').width() * defozoom, newH = $('#media').height() * defozoom;
+					$('#src').width(newW).height(newH);
+					$('#media #canvas').attr({'width': newW, 'height': newH});
+					$(window).scrollLeft($(window).scrollLeft() - ((oldW - newW) / 2)).scrollTop($(window).scrollTop() - ((oldH - newH) / 2));
+				}
+				
+				
+				//描画コンテキストの取得
+				var canvas = $('#media #canvas').get(0);
+				var ctx = canvas.getContext('2d');
+
+				// 書き込み
+				$('#media #canvas').on('mousemove', function(e){
+					if (e.buttons === 1 || e.witch === 1 || e.buttons === 2 || e.witch === 3) {
+						ctx.globalCompositeOperation = (e.buttons === 1 || e.witch === 1) ? 'source-over' : 'destination-out';
+						defosize = (e.buttons === 1 || e.witch === 1) ? penwidth : erasewidth;
+						draw(e);
+					}
+				});
+				$('#media #canvas').on('mousedown', function(e){
+					if (e.button === 0 || e.button === 2) {
+						ctx.globalCompositeOperation = (e.button === 0) ? 'source-over' : 'destination-out';
+						defosize = (e.button === 0) ? penwidth : erasewidth;
+						draw(e);
+						if (0 < $('#media video').length) {
+							$('#media video').get(0).pause();
+							$('#video_ctrl .playpause').removeClass('play').addClass('pause');
+						}
+					}
+				});
+				$('#media #canvas').on('mouseup mouseout', function(e){
+					mouseX = "";
+					mouseY = "";
+				});
+
+				// マウス位置を元に直線を描く関数
+				function draw(e) {
+					var rect = e.target.getBoundingClientRect();
+					var X = ~~(e.clientX - rect.left);
+					var Y = ~~(e.clientY - rect.top);
+					
+					ctx.beginPath();
+					ctx.globalAlpha = defoalpha;
+					//マウス継続値によって場合分け、直線の moveTo（スタート地点）を決定
+					if (mouseX === "") {
+						//継続値が初期値の場合は、現在のマウス位置をスタート位置とする
+						ctx.moveTo(X, Y);
+					} else {
+						//継続値が初期値ではない場合は、前回のゴール位置を次のスタート位置とする
+						ctx.moveTo(mouseX, mouseY);
+					}
+					//lineTo（ゴール地点）の決定、現在のマウス位置をゴール地点とする
+					ctx.lineTo(X, Y);
+					//直線の角を「丸」、サイズと色を決める
+					ctx.lineCap = "round";
+					ctx.lineWidth = defosize;
+					ctx.strokeStyle = defocolor;
+					ctx.stroke();
+					//マウス継続値に現在のマウス位置、つまりゴール位置を代入
+					mouseX = X;
+					mouseY = Y;
+				};
+				
+				// キャンバスのクリア（お絵描き）
+				function clearCanvas() {
+					ctx.clearRect(0, 0, $('#media #canvas').width(), $('#media #canvas').height());
+				}
+
+				
+				
+				
+				// ショートカットキー処理
+				var shortcut = {
+					// ファイル読み込み(Enterキー)
+					'13': 'file',
+					// 色変更
+					'49': 'color',
+					'50': 'color',
+					'51': 'color',
+					'52': 'color',
+					'53': 'color',
+					'54': 'color',
+					'55': 'color',
+					'56': 'color',
+					'57': 'color',
+					// お絵描き全削除
+					'46': 'clear',
+					// ズーム(+-キー)
+					'187s': 'zoom_i', '107': 'zoom_i', '189s': 'zoom_o', '109': 'zoom_o',
+					// 動画再生停止
+					'32': 'playpause',
+					// シーク
+					'39': 'seek_f', '37': 'seek_b',
+					// 動画先頭へ
+					'36': 'seek_s', '35': 'seek_e',
+					// ボリューム上げる
+					'38': 'volume_u', '40': 'volume_d',
+				};
+				// ショートカットキー
+				$(window).on('keydown', function(e){
+					// キーコードを加工
+					var code = e.keyCode;
+					if (e.shiftKey) code += 's';
+					// モードを取得
+					var mode = shortcut[code];
+					if (mode) {
+						switch(mode) {
+							// ファイル読み込み
+							case 'file':
+								$('#ctrl [name="file"]').trigger('click');
+								break;
+								
+							// 色変更
+							case 'color':
+								defocolor = colors[e.keyCode - 49];
+								break;
+							
+							// お絵描きクリア
+							case 'clear':
+								clearCanvas();
+								break;
+							
+							// ズームイン
+							case 'zoom_i':
+								defozoom += ((e.ctrlKey) ? 0.1 : 0.01);
+								zoom();
+								return false;
+							// ズームアウト
+							case 'zoom_o':
+								defozoom -= ((e.ctrlKey) ? 0.1 : 0.01);
+								zoom();
+								return false;
+								
+							// 動画再生停止
+							case 'playpause':
+								if (0 < $('video').length) {
+									if ($('video').get(0).paused) {
+										$('video').get(0).play();
+										clearCanvas();
+									}
+									else {
+										$('video').get(0).pause();
+									}
+								}
+								break;
+							
+							// シーク進める
+							case 'seek_f':
+								if (0 < $('video').length) {
+									var add = (e.ctrlKey) ? 10 : 1;
+									//$('video').get(0).currentTime += add;
+									$('video').get(0).currentTime = Math.min($('video').get(0).currentTime + add, $('video').get(0).duration);
+									clearCanvas();
+								}
+								break;
+							// シーク戻す
+							case 'seek_b':
+								if (0 < $('video').length) {
+									var add = (e.ctrlKey) ? 10 : 1;
+									//$('video').get(0).currentTime -= add;
+									$('video').get(0).currentTime = Math.max($('video').get(0).currentTime - add, 0);
+									clearCanvas();
+								}
+								break;
+								
+							// シーク先頭
+							case 'seek_s':
+								if (0 < $('video').length) {
+									$('video').get(0).currentTime = 0;
+									clearCanvas();
+								}
+								break;
+							// シーク最後
+							case 'seek_e':
+								if (0 < $('video').length) {
+									$('video').get(0).currentTime = $('video').get(0).duration;
+									clearCanvas();
+								}
+								break;
+							
+							// ボリューム上げる
+							case 'volume_u':
+								if (0 < $('video').length) {
+									var add = (e.ctrlKey) ? 0.1 : 0.01;
+									$('video').get(0).volume = Math.min($('video').get(0).volume + add, 1);
+								}
+								break;
+							// ボリューム下げる
+							case 'volume_d':
+								if (0 < $('video').length) {
+									var add = (e.ctrlKey) ? 0.1 : 0.01;
+									$('video').get(0).volume = Math.max($('video').get(0).volume - add, 0);
+								}
+								break;
+							
+						}
+					}	
+				});
+				
+				// 右クリックでお絵描きするのでメニュー表示しないように
+				$('body').on('contextmenu', function(){return false;});
+			
+			});
+		
+			
+		</script>
+		
+	</body>
+</html>
