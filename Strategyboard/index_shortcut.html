@@ -183,6 +183,15 @@
 					'55': 'color',
 					'56': 'color',
 					'57': 'color',
+					'97': 'color',
+					'98': 'color',
+					'99': 'color',
+					'100': 'color',
+					'101': 'color',
+					'102': 'color',
+					'103': 'color',
+					'104': 'color',
+					'105': 'color',
 					// お絵描き全削除
 					'46': 'clear',
 					// ズーム(+-キー)
@@ -197,7 +206,7 @@
 					'38': 'volume_u', '40': 'volume_d',
 				};
 				// ショートカットキー
-				$(window).on('keydown', function(e){
+				$(window).on('keydown', function(e){console.log(e.keyCode);
 					// キーコードを加工
 					var code = e.keyCode;
 					if (e.shiftKey) code += 's';
